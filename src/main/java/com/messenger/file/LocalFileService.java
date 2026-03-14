@@ -26,7 +26,7 @@ public class LocalFileService {
     private static final Set<String> ALLOWED_MIMES = Set.of(
             "image/jpeg", "image/png", "image/gif", "image/webp",
             "application/pdf", "audio/mpeg", "audio/ogg", "audio/mp4",
-            "audio/aac", "audio/x-m4a", "video/mp4"
+            "audio/aac", "audio/x-aac", "audio/x-m4a", "video/mp4"
     );
 
     private static final Map<String, String> MIME_TO_EXT = Map.ofEntries(
@@ -39,6 +39,7 @@ public class LocalFileService {
             Map.entry("audio/ogg", ".ogg"),
             Map.entry("audio/mp4", ".m4a"),
             Map.entry("audio/aac", ".aac"),
+            Map.entry("audio/x-aac", ".aac"),
             Map.entry("audio/x-m4a", ".m4a"),
             Map.entry("video/mp4", ".mp4")
     );
