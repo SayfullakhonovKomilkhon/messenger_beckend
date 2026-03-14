@@ -34,11 +34,11 @@ file:
   max-size-bytes: ${FILE_MAX_SIZE_BYTES:104857600}
 
 r2:
-  endpoint: ${R2_ENDPOINT}
-  access-key-id: ${R2_ACCESS_KEY_ID}
-  secret-access-key: ${R2_SECRET_ACCESS_KEY}
-  bucket-name: ${R2_BUCKET_NAME}
-  public-url: ${R2_PUBLIC_URL}
+  endpoint: ${R2_ENDPOINT:}
+  access-key-id: ${R2_ACCESS_KEY_ID:}
+  secret-access-key: ${R2_SECRET_ACCESS_KEY:}
+  bucket-name: ${R2_BUCKET_NAME:}
+  public-url: ${R2_PUBLIC_URL:}
 
 fcm:
   project-id: ${FCM_PROJECT_ID:}

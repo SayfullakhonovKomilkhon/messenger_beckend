@@ -1,5 +1,6 @@
 package com.messenger.file;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -12,6 +13,7 @@ import java.net.URI;
 
 @Configuration
 @ConfigurationProperties(prefix = "r2")
+@ConditionalOnExpression("!'${r2.endpoint:}'.trim().isEmpty()")
 public class R2Config {
 
     private String endpoint;
