@@ -26,7 +26,8 @@ public class LocalFileService {
     private static final Set<String> ALLOWED_MIMES = Set.of(
             "image/jpeg", "image/png", "image/gif", "image/webp",
             "application/pdf", "audio/mpeg", "audio/ogg", "audio/mp4",
-            "audio/aac", "audio/x-aac", "audio/x-m4a", "video/mp4"
+            "audio/aac", "audio/x-aac", "audio/x-m4a",
+            "video/mp4", "video/quicktime"
     );
 
     private static final Map<String, String> MIME_TO_EXT = Map.ofEntries(
@@ -41,7 +42,8 @@ public class LocalFileService {
             Map.entry("audio/aac", ".aac"),
             Map.entry("audio/x-aac", ".aac"),
             Map.entry("audio/x-m4a", ".m4a"),
-            Map.entry("video/mp4", ".mp4")
+            Map.entry("video/mp4", ".mp4"),
+            Map.entry("video/quicktime", ".mov")
     );
 
     private final Tika tika = new Tika();

@@ -51,6 +51,7 @@ public class FileController {
                 else if (lower.endsWith(".m4a")) contentType = "audio/mp4";
                 else if (lower.endsWith(".aac")) contentType = "audio/aac";
                 else if (lower.endsWith(".mp4")) contentType = "video/mp4";
+                else if (lower.endsWith(".mov")) contentType = "video/quicktime";
                 else if (lower.endsWith(".pdf")) contentType = "application/pdf";
 
                 return ResponseEntity.ok()
