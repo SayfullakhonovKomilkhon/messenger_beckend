@@ -5,6 +5,7 @@ import com.messenger.call.entity.CallRecord;
 import com.messenger.common.cache.CacheService;
 import com.messenger.common.exception.AppException;
 import com.messenger.common.notification.NotificationService;
+import com.messenger.user.SettingsService;
 import com.messenger.user.UserRepository;
 import com.messenger.user.entity.User;
 import org.slf4j.Logger;
@@ -32,15 +33,18 @@ public class CallService {
     private final UserRepository userRepository;
     private final CacheService cacheService;
     private final NotificationService notificationService;
+    private final SettingsService settingsService;
 
     public CallService(CallRepository callRepository,
                        UserRepository userRepository,
                        CacheService cacheService,
-                       NotificationService notificationService) {
+                       NotificationService notificationService,
+                       SettingsService settingsService) {
         this.callRepository = callRepository;
         this.userRepository = userRepository;
         this.cacheService = cacheService;
         this.notificationService = notificationService;
+        this.settingsService = settingsService;
     }
 
     @Transactional
@@ -51,6 +55,20 @@ public class CallService {
 
         userRepository.findById(request.calleeId())
                 .orElseThrow(() -> new AppException("Callee not found", HttpStatus.NOT_FOUND));
+
+        // Check if callee allows voice/video calls
+        Map<String, Object> calleeSettings = settingsService.getSettings(request.calleeId());
+        @SuppressWarnings("unchecked")
+        Map<String, Object> privacy = (Map<String, Object>) calleeSettings.get("privacy");
+        if (privacy != null && Boolean.FALSE.equals(privacy.get("voiceVideoCalls"))) {
+            CallEventResponse blockedEvent = CallEventResponse.withData(
+                    "CALL_BLOCKED",
+                    "blocked",
+                    Map.of("reason", "Пользователь не принимает звонки")
+            );
+            notificationService.sendCallEvent(callerId, blockedEvent);
+            throw new AppException("This user does not accept voice or video calls", HttpStatus.FORBIDDEN);
+        }
 
         CallRecord record = new CallRecord();
         record.setCallerId(callerId);
