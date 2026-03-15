@@ -37,6 +37,8 @@ jwt:
 
 file:
   max-size-bytes: ${FILE_MAX_SIZE_BYTES:104857600}
+  # Railway: задайте FILE_UPLOAD_DIR=/app/uploads и подключите Volume с mount path /app/uploads
+  upload-dir: ${FILE_UPLOAD_DIR:uploads}
   # Railway: автоматически через RAILWAY_PUBLIC_DOMAIN. Или задайте FILE_PUBLIC_BASE_URL вручную
   public-base-url: ${FILE_PUBLIC_BASE_URL:http://localhost:3000/uploads}
 

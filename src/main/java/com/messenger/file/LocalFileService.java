@@ -10,6 +10,9 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
+import org.springframework.core.io.Resource;
+import org.springframework.core.io.UrlResource;
+
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -89,8 +92,10 @@ public class LocalFileService {
 
         try {
             Path filePath = uploadDir.resolve(fileName);
+            Files.createDirectories(filePath.getParent());
             Files.write(filePath, bytes);
         } catch (IOException e) {
+            log.error("Failed to save file to {}: {}", uploadDir.toAbsolutePath(), e.getMessage(), e);
             throw new AppException("Failed to save file", HttpStatus.INTERNAL_SERVER_ERROR);
         }
 
@@ -98,5 +103,14 @@ public class LocalFileService {
         log.info("File uploaded locally: {} ({})", fileId, mime);
 
         return new FileUploadResponse(fileId, fileUrl, mime, file.getSize());
+    }
+
+    public Resource getFileResource(String filename) throws IOException {
+        if (filename.contains("..") || filename.contains("/")) {
+            return null;
+        }
+        Path filePath = uploadDir.resolve(filename).toAbsolutePath().normalize();
+        Resource resource = new UrlResource(filePath.toUri());
+        return (resource.exists() && resource.isReadable()) ? resource : null;
     }
 }

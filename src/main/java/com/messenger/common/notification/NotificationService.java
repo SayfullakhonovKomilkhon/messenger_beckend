@@ -53,7 +53,7 @@ public class NotificationService {
         Map<String, Object> notifications = (Map<String, Object>) settings.get("notifications");
         boolean fastMode = notifications == null || !Boolean.FALSE.equals(notifications.get("fastMode"));
         if (!fastMode) {
-            log.debug("Push skipped for user {} (fastMode off)", recipientId);
+            log.info("[FCM] Push skipped for user {} (fastMode off)", recipientId);
             return;
         }
 
@@ -63,7 +63,7 @@ public class NotificationService {
             ConversationParticipant cp = participantOpt.get();
             if (Boolean.TRUE.equals(cp.getIsMuted()) ||
                     Boolean.FALSE.equals(cp.getIsNotificationsEnabled())) {
-                log.debug("Push skipped for user {} (conversation muted or notifications disabled)", recipientId);
+                log.info("[FCM] Push skipped for user {} (conversation muted or notifications disabled)", recipientId);
                 return;
             }
         }

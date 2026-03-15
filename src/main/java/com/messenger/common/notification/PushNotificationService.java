@@ -30,13 +30,13 @@ public class PushNotificationService {
 
     public void sendPush(UUID userId, String title, String body, Map<String, String> data) {
         if (firebaseMessaging == null) {
-            log.debug("FCM not configured, skipping push for user {}", userId);
+            log.info("[FCM] Push skipped: Firebase not configured");
             return;
         }
 
         User user = userRepository.findById(userId).orElse(null);
         if (user == null || user.getFcmToken() == null || user.getFcmToken().isBlank()) {
-            log.debug("No FCM token for user {}, skipping push", userId);
+            log.info("[FCM] Push skipped for user {}: no FCM token (user logged in on this device?)", userId);
             return;
         }
 
@@ -53,9 +53,9 @@ public class PushNotificationService {
 
         try {
             String messageId = firebaseMessaging.send(messageBuilder.build());
-            log.debug("Push sent to user {}: {}", userId, messageId);
+            log.info("[FCM] Push sent to user {}: {}", userId, messageId);
         } catch (FirebaseMessagingException e) {
-            log.warn("Failed to send push to user {}: {}", userId, e.getMessage());
+            log.warn("[FCM] Failed to send push to user {}: {}", userId, e.getMessage());
         }
     }
 }

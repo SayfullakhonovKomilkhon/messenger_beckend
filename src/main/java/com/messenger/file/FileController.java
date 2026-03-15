@@ -2,7 +2,6 @@ package com.messenger.file;
 
 import com.messenger.file.dto.FileUploadResponse;
 import org.springframework.core.io.Resource;
-import org.springframework.core.io.UrlResource;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -12,8 +11,6 @@ import org.springframework.web.multipart.MultipartFile;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 
-import java.nio.file.Path;
-import java.nio.file.Paths;
 
 @RestController
 @Tag(name = "Files", description = "Загрузка файлов (изображения, видео, аудио, PDF)")
@@ -34,12 +31,8 @@ public class FileController {
     @GetMapping("/uploads/{filename}")
     public ResponseEntity<Resource> serveFile(@PathVariable String filename) {
         try {
-            if (filename.contains("..") || filename.contains("/")) {
-                return ResponseEntity.badRequest().build();
-            }
-            Path filePath = Paths.get("uploads").resolve(filename).toAbsolutePath().normalize();
-            Resource resource = new UrlResource(filePath.toUri());
-            if (resource.exists() && resource.isReadable()) {
+            Resource resource = localFileService.getFileResource(filename);
+            if (resource != null) {
                 String contentType = "application/octet-stream";
                 String lower = filename.toLowerCase();
                 if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) contentType = "image/jpeg";
