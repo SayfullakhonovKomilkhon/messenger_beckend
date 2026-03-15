@@ -106,7 +106,8 @@ public class CallService {
                 Map.of("callerName", callerName)
         );
         notificationService.sendCallNotification(
-                request.calleeId(), callerName, request.callType(), event.callId(), calleeEvent
+                request.calleeId(), callerName, request.callType(), event.callId(),
+                event.callerId(), calleeEvent
         );
     }
 

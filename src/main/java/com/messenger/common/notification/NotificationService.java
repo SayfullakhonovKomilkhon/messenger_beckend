@@ -99,6 +99,7 @@ public class NotificationService {
 
     public void sendCallNotification(UUID recipientId, String callerName,
                                       String callType, String callId,
+                                      String callerId,
                                       Object wsPayload) {
         sendToUser(recipientId, "/queue/call", wsPayload);
 
@@ -106,7 +107,8 @@ public class NotificationService {
         pushService.sendPush(recipientId, callerName, body, Map.of(
                 "type", "INCOMING_CALL",
                 "callId", callId,
-                "callType", callType
+                "callType", callType,
+                "callerId", callerId
         ));
     }
 
