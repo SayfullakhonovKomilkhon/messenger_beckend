@@ -38,6 +38,9 @@ public class ConversationParticipant {
     @Column(name = "is_notifications_enabled")
     private Boolean isNotificationsEnabled = true;
 
+    @Column(name = "status", length = 20)
+    private String status = "ACTIVE"; // ACTIVE | PENDING
+
     public UUID getId() { return id; }
     public void setId(UUID id) { this.id = id; }
 
@@ -61,4 +64,7 @@ public class ConversationParticipant {
 
     public Boolean getIsNotificationsEnabled() { return isNotificationsEnabled; }
     public void setIsNotificationsEnabled(Boolean isNotificationsEnabled) { this.isNotificationsEnabled = isNotificationsEnabled; }
+
+    public String getStatus() { return status; }
+    public void setStatus(String status) { this.status = status; }
 }

@@ -113,4 +113,40 @@ public class ChatController {
         UUID userId = UUID.fromString((String) authentication.getPrincipal());
         return ResponseEntity.ok(chatService.getPinnedMessages(id, userId));
     }
+
+    @Operation(summary = "Список запросов сообщений")
+    @GetMapping("/requests")
+    public ResponseEntity<List<ConversationResponse>> getMessageRequests(Authentication authentication) {
+        UUID userId = UUID.fromString((String) authentication.getPrincipal());
+        return ResponseEntity.ok(chatService.getMessageRequests(userId));
+    }
+
+    @Operation(summary = "Принять запрос сообщения")
+    @PostMapping("/{id}/accept-request")
+    public ResponseEntity<Map<String, Boolean>> acceptMessageRequest(
+            @PathVariable UUID id,
+            Authentication authentication) {
+        UUID userId = UUID.fromString((String) authentication.getPrincipal());
+        chatService.acceptMessageRequest(id, userId);
+        return ResponseEntity.ok(Map.of("success", true));
+    }
+
+    @Operation(summary = "Отклонить запрос сообщения")
+    @PostMapping("/{id}/decline-request")
+    public ResponseEntity<Map<String, Boolean>> declineMessageRequest(
+            @PathVariable UUID id,
+            @RequestParam(defaultValue = "false") boolean block,
+            Authentication authentication) {
+        UUID userId = UUID.fromString((String) authentication.getPrincipal());
+        chatService.declineMessageRequest(id, userId, block);
+        return ResponseEntity.ok(Map.of("success", true));
+    }
+
+    @Operation(summary = "Отклонить все запросы сообщений")
+    @DeleteMapping("/requests")
+    public ResponseEntity<Map<String, Boolean>> declineAllMessageRequests(Authentication authentication) {
+        UUID userId = UUID.fromString((String) authentication.getPrincipal());
+        chatService.declineAllMessageRequests(userId);
+        return ResponseEntity.ok(Map.of("success", true));
+    }
 }

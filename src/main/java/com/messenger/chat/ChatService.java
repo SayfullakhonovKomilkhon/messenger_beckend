@@ -6,6 +6,7 @@ import com.messenger.chat.entity.ConversationParticipant;
 import com.messenger.chat.entity.Message;
 import com.messenger.common.exception.AppException;
 import com.messenger.common.notification.NotificationService;
+import com.messenger.user.BlockService;
 import com.messenger.user.UserRepository;
 import com.messenger.user.entity.User;
 import org.slf4j.Logger;
@@ -29,17 +30,20 @@ public class ChatService {
     private final ParticipantRepository participantRepository;
     private final UserRepository userRepository;
     private final NotificationService notificationService;
+    private final BlockService blockService;
 
     public ChatService(ConversationRepository conversationRepository,
                        MessageRepository messageRepository,
                        ParticipantRepository participantRepository,
                        UserRepository userRepository,
-                       NotificationService notificationService) {
+                       NotificationService notificationService,
+                       BlockService blockService) {
         this.conversationRepository = conversationRepository;
         this.messageRepository = messageRepository;
         this.participantRepository = participantRepository;
         this.userRepository = userRepository;
         this.notificationService = notificationService;
+        this.blockService = blockService;
     }
 
     public List<ConversationResponse> getConversations(UUID userId) {
@@ -65,6 +69,8 @@ public class ChatService {
                     .filter(cp -> cp.getUser().getId().equals(userId))
                     .findFirst().orElse(null);
             if (myParticipation == null) continue;
+            // Только ACTIVE — PENDING идут в «Запросы сообщений»
+            if ("PENDING".equals(myParticipation.getStatus())) continue;
 
             ConversationParticipant otherParticipation = participants.stream()
                     .filter(cp -> !cp.getUser().getId().equals(userId))
@@ -131,6 +137,13 @@ public class ChatService {
             throw new AppException("Cannot create conversation with yourself", HttpStatus.BAD_REQUEST);
         }
 
+        if (blockService.isBlocked(participantId, userId)) {
+            throw new AppException("User has blocked you", HttpStatus.FORBIDDEN);
+        }
+        if (blockService.isBlocked(userId, participantId)) {
+            throw new AppException("You have blocked this user", HttpStatus.FORBIDDEN);
+        }
+
         User participant = userRepository.findById(participantId)
                 .orElseThrow(() -> new AppException("User not found", HttpStatus.NOT_FOUND));
         User currentUser = userRepository.findById(userId)
@@ -166,14 +179,16 @@ public class ChatService {
         ConversationParticipant cp1 = new ConversationParticipant();
         cp1.setConversation(conversation);
         cp1.setUser(currentUser);
+        cp1.setStatus("ACTIVE");
         participantRepository.save(cp1);
 
         ConversationParticipant cp2 = new ConversationParticipant();
         cp2.setConversation(conversation);
         cp2.setUser(participant);
+        cp2.setStatus("PENDING"); // Получатель должен принять запрос
         participantRepository.save(cp2);
 
-        log.info("Conversation created between {} and {}", userId, participantId);
+        log.info("Conversation created between {} and {} (recipient PENDING)", userId, participantId);
 
         return new ConversationResponse(
                 conversation.getId().toString(),
@@ -482,6 +497,131 @@ public class ChatService {
         return messageRepository.findPinnedMessages(conversationId).stream()
                 .map(this::toMessageResponse)
                 .toList();
+    }
+
+    public List<ConversationResponse> getMessageRequests(UUID userId) {
+        List<ConversationParticipant> allParticipants =
+                conversationRepository.findAllParticipantsByUserConversations(userId);
+
+        Map<UUID, List<ConversationParticipant>> byConversation = allParticipants.stream()
+                .collect(Collectors.groupingBy(cp -> cp.getConversation().getId()));
+
+        // Оставляем только диалоги, где у текущего пользователя статус PENDING
+        Map<UUID, List<ConversationParticipant>> pendingConversations = new HashMap<>();
+        for (Map.Entry<UUID, List<ConversationParticipant>> entry : byConversation.entrySet()) {
+            ConversationParticipant myCp = entry.getValue().stream()
+                    .filter(cp -> cp.getUser().getId().equals(userId))
+                    .findFirst().orElse(null);
+            if (myCp != null && "PENDING".equals(myCp.getStatus())) {
+                pendingConversations.put(entry.getKey(), entry.getValue());
+            }
+        }
+
+        if (pendingConversations.isEmpty()) return List.of();
+
+        Map<UUID, Message> lastMessages = messageRepository.findLastMessagesByConversationIds(pendingConversations.keySet())
+                .stream()
+                .collect(Collectors.toMap(Message::getConversationId, m -> m));
+
+        List<ConversationResponse> result = new ArrayList<>();
+        for (Map.Entry<UUID, List<ConversationParticipant>> entry : pendingConversations.entrySet()) {
+            UUID convId = entry.getKey();
+            List<ConversationParticipant> participants = entry.getValue();
+
+            ConversationParticipant myParticipation = participants.stream()
+                    .filter(cp -> cp.getUser().getId().equals(userId))
+                    .findFirst().orElse(null);
+            if (myParticipation == null) continue;
+
+            ConversationParticipant otherParticipation = participants.stream()
+                    .filter(cp -> !cp.getUser().getId().equals(userId))
+                    .findFirst().orElse(null);
+            if (otherParticipation == null) continue;
+
+            User other = otherParticipation.getUser();
+            ConversationResponse.ParticipantInfo participantInfo = new ConversationResponse.ParticipantInfo(
+                    other.getId().toString(),
+                    other.getName(),
+                    other.getAvatarUrl(),
+                    other.getIsOnline()
+            );
+
+            ConversationResponse.LastMessageInfo lastMessageInfo = null;
+            Message lastMsg = lastMessages.get(convId);
+            if (lastMsg != null) {
+                lastMessageInfo = new ConversationResponse.LastMessageInfo(
+                        lastMsg.getText(), lastMsg.getCreatedAt(), lastMsg.getStatus()
+                );
+            }
+
+            result.add(new ConversationResponse(
+                    convId.toString(),
+                    myParticipation.getConversation().getUpdatedAt(),
+                    participantInfo,
+                    lastMessageInfo,
+                    myParticipation.getUnreadCount() != null ? myParticipation.getUnreadCount() : 0,
+                    Boolean.TRUE.equals(myParticipation.getIsPinned()),
+                    Boolean.TRUE.equals(myParticipation.getIsMuted())
+            ));
+        }
+
+        result.sort((a, b) -> {
+            if (a.updatedAt() == null) return 1;
+            if (b.updatedAt() == null) return -1;
+            return b.updatedAt().compareTo(a.updatedAt());
+        });
+
+        return result;
+    }
+
+    @Transactional
+    public void acceptMessageRequest(UUID conversationId, UUID userId) {
+        ConversationParticipant cp = conversationRepository.findParticipant(conversationId, userId)
+                .orElseThrow(() -> new AppException("Not a participant", HttpStatus.FORBIDDEN));
+        if (!"PENDING".equals(cp.getStatus())) {
+            throw new AppException("Not a message request", HttpStatus.BAD_REQUEST);
+        }
+        cp.setStatus("ACTIVE");
+        participantRepository.save(cp);
+        log.info("User {} accepted message request for conversation {}", userId, conversationId);
+    }
+
+    @Transactional
+    public void declineMessageRequest(UUID conversationId, UUID userId, boolean blockUser) {
+        ConversationParticipant myCp = conversationRepository.findParticipant(conversationId, userId)
+                .orElseThrow(() -> new AppException("Not a participant", HttpStatus.FORBIDDEN));
+        if (!"PENDING".equals(myCp.getStatus())) {
+            throw new AppException("Not a message request", HttpStatus.BAD_REQUEST);
+        }
+
+        List<ConversationParticipant> participants = conversationRepository.findParticipants(conversationId);
+        UUID senderId = participants.stream()
+                .filter(cp -> !cp.getUser().getId().equals(userId))
+                .map(cp -> cp.getUser().getId())
+                .findFirst()
+                .orElse(null);
+
+        if (blockUser && senderId != null && !blockService.isBlocked(userId, senderId)) {
+            blockService.blockUser(userId, senderId);
+        }
+
+        participantRepository.delete(myCp);
+        log.info("User {} declined message request for conversation {}, block={}", userId, conversationId, blockUser);
+    }
+
+    @Transactional
+    public void declineAllMessageRequests(UUID userId) {
+        List<ConversationParticipant> allParticipants =
+                conversationRepository.findAllParticipantsByUserConversations(userId);
+        List<ConversationParticipant> pending = allParticipants.stream()
+                .filter(cp -> cp.getUser().getId().equals(userId) && "PENDING".equals(cp.getStatus()))
+                .toList();
+        for (ConversationParticipant cp : pending) {
+            participantRepository.delete(cp);
+        }
+        if (!pending.isEmpty()) {
+            log.info("User {} declined {} message requests", userId, pending.size());
+        }
     }
 
     private MessageResponse toMessageResponse(Message message) {
