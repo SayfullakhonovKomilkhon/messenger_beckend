@@ -83,6 +83,8 @@
 |------------|----------|
 | `FCM_PROJECT_ID` | ID проекта Firebase |
 | `FCM_CLIENT_EMAIL` | Email сервисного аккаунта |
+| `FCM_CLIENT_ID` | client_id из JSON ключа |
+| `FCM_PRIVATE_KEY_ID` | private_key_id из JSON ключа |
 | `FCM_PRIVATE_KEY` | Приватный ключ (в кавычках, с `\n` для переносов) |
 
 ### Опциональные

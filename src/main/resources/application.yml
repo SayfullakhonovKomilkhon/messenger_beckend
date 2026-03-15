@@ -52,7 +52,9 @@ r2:
 fcm:
   project-id: ${FCM_PROJECT_ID:}
   client-email: ${FCM_CLIENT_EMAIL:}
+  client-id: ${FCM_CLIENT_ID:}
   private-key: ${FCM_PRIVATE_KEY:}
+  private-key-id: ${FCM_PRIVATE_KEY_ID:}
 
 logging:
   level:

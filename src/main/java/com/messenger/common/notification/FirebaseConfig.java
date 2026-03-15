@@ -1,5 +1,6 @@
 package com.messenger.common.notification;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.auth.oauth2.GoogleCredentials;
 import com.google.firebase.FirebaseApp;
 import com.google.firebase.FirebaseOptions;
@@ -13,6 +14,7 @@ import org.springframework.context.annotation.Configuration;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.Map;
 
 @Configuration
 public class FirebaseConfig {
@@ -25,26 +27,35 @@ public class FirebaseConfig {
     @Value("${fcm.client-email:}")
     private String clientEmail;
 
+    @Value("${fcm.client-id:}")
+    private String clientId;
+
     @Value("${fcm.private-key:}")
     private String privateKey;
 
+    @Value("${fcm.private-key-id:}")
+    private String privateKeyId;
+
     @Bean
     public FirebaseMessaging firebaseMessaging() {
-        if (projectId.isBlank() || clientEmail.isBlank() || privateKey.isBlank()) {
-            log.warn("FCM credentials not configured — push notifications disabled");
+        if (projectId.isBlank() || clientEmail.isBlank() || privateKey.isBlank()
+                || clientId.isBlank() || privateKeyId.isBlank()) {
+            log.warn("FCM credentials not configured (need FCM_PROJECT_ID, FCM_CLIENT_EMAIL, FCM_CLIENT_ID, FCM_PRIVATE_KEY, FCM_PRIVATE_KEY_ID) — push disabled");
             return null;
         }
 
         try {
-            String serviceAccountJson = """
-                    {
-                      "type": "service_account",
-                      "project_id": "%s",
-                      "client_email": "%s",
-                      "private_key": "%s",
-                      "token_uri": "https://oauth2.googleapis.com/token"
-                    }
-                    """.formatted(projectId, clientEmail, privateKey.replace("\\n", "\n"));
+            String keyWithNewlines = privateKey.replace("\\n", "\n");
+            Map<String, String> creds = Map.of(
+                    "type", "service_account",
+                    "project_id", projectId,
+                    "private_key_id", privateKeyId,
+                    "private_key", keyWithNewlines,
+                    "client_email", clientEmail,
+                    "client_id", clientId,
+                    "token_uri", "https://oauth2.googleapis.com/token"
+            );
+            String serviceAccountJson = new ObjectMapper().writeValueAsString(creds);
 
             GoogleCredentials credentials = GoogleCredentials.fromStream(
                     new ByteArrayInputStream(serviceAccountJson.getBytes(StandardCharsets.UTF_8))
