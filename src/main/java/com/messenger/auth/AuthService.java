@@ -126,13 +126,17 @@ public class AuthService {
 
         String userId = jwtService.extractUserId(token);
 
+        // Preserve the active deviceId so WebSocket device enforcement still works
+        User currentUser = userRepository.findById(java.util.UUID.fromString(userId)).orElse(null);
+        String activeDeviceId = currentUser != null ? currentUser.getActiveDeviceId() : null;
+
         refreshTokenRepository.deleteByToken(token);
 
-        String newAccess = jwtService.generateAccessToken(userId);
+        String newAccess = jwtService.generateAccessToken(userId, activeDeviceId);
         String newRefresh = jwtService.generateRefreshToken(userId);
         saveRefreshToken(stored.getUser(), newRefresh);
 
-        log.info("Tokens refreshed for user: {}", userId);
+        log.info("Tokens refreshed for user: {} (device: {})", userId, activeDeviceId);
         return new TokenResponse(newAccess, newRefresh);
     }
 

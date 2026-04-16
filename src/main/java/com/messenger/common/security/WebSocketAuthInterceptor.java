@@ -15,8 +15,9 @@ import org.springframework.stereotype.Component;
 import java.security.Principal;
 import java.util.UUID;
 
+// NOTE: Device validation is now handled inside WebSocketConfig.configureClientInboundChannel.
+// This class is kept for reference but is NOT registered as a bean.
 @Slf4j
-@Component
 @RequiredArgsConstructor
 public class WebSocketAuthInterceptor implements ChannelInterceptor {
 

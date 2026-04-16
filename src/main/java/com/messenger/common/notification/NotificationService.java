@@ -40,7 +40,9 @@ public class NotificationService {
     }
 
     public void sendToUser(UUID userId, String destination, Object payload) {
-        messagingTemplate.convertAndSendToUser(userId.toString(), destination, payload);
+        // Flutter subscribes to /user/{userId}/queue/* as plain broker topics.
+        // We send directly to the same path without user-destination routing.
+        messagingTemplate.convertAndSend("/user/" + userId + destination, payload);
     }
 
     public void sendToUsers(List<UUID> userIds, String destination, Object payload) {
