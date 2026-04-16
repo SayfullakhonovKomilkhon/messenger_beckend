@@ -1,9 +1,14 @@
 spring:
   datasource:
-    url: ${DATABASE_URL}
-    username: ${POSTGRES_USER}
-    password: ${POSTGRES_PASSWORD}
+    # Railway: добавьте DATABASE_JDBC_URL = jdbc:postgresql://${{Postgres.PGHOST}}:${{Postgres.PGPORT}}/${{Postgres.PGDATABASE}}
+    # Local: использует localhost по умолчанию
+    url: ${DATABASE_JDBC_URL:jdbc:postgresql://${PGHOST:localhost}:${PGPORT:5432}/${PGDATABASE:messenger}}
+    username: ${PGUSER:${POSTGRES_USER:postgres}}
+    password: ${PGPASSWORD:${POSTGRES_PASSWORD:postgres}}
     driver-class-name: org.postgresql.Driver
+    hikari:
+      connection-timeout: 30000
+      initialization-fail-timeout: -1
   jpa:
     hibernate:
       ddl-auto: validate
@@ -32,18 +37,31 @@ jwt:
 
 file:
   max-size-bytes: ${FILE_MAX_SIZE_BYTES:104857600}
+  # Railway: задайте FILE_UPLOAD_DIR=/app/uploads и подключите Volume с mount path /app/uploads
+  upload-dir: ${FILE_UPLOAD_DIR:uploads}
+  # Railway: автоматически через RAILWAY_PUBLIC_DOMAIN. Или задайте FILE_PUBLIC_BASE_URL вручную
+  public-base-url: ${FILE_PUBLIC_BASE_URL:http://localhost:3000/uploads}
 
 r2:
-  endpoint: ${R2_ENDPOINT}
-  access-key-id: ${R2_ACCESS_KEY_ID}
-  secret-access-key: ${R2_SECRET_ACCESS_KEY}
-  bucket-name: ${R2_BUCKET_NAME}
-  public-url: ${R2_PUBLIC_URL}
+  endpoint: ${R2_ENDPOINT:}
+  access-key-id: ${R2_ACCESS_KEY_ID:}
+  secret-access-key: ${R2_SECRET_ACCESS_KEY:}
+  bucket-name: ${R2_BUCKET_NAME:}
+  public-url: ${R2_PUBLIC_URL:}
 
 fcm:
+  service-account-json: ${FCM_SERVICE_ACCOUNT_JSON:}
+  service-account-file: ${FCM_SERVICE_ACCOUNT_FILE:}
   project-id: ${FCM_PROJECT_ID:}
   client-email: ${FCM_CLIENT_EMAIL:}
+  client-id: ${FCM_CLIENT_ID:}
   private-key: ${FCM_PRIVATE_KEY:}
+  private-key-id: ${FCM_PRIVATE_KEY_ID:}
+
+# Shared secret: bot-gateway must send this header to core (/internal/v1/bot/**).
+# Generate a long random string in production.
+messenger:
+  internal-bot-gateway-key: ${INTERNAL_BOT_GATEWAY_KEY:}
 
 logging:
   level:

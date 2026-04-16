@@ -63,6 +63,11 @@ public class AuthService {
 
     @Transactional
     public AuthResponse login(LoginRequest request) {
+        return login(request, null);
+    }
+
+    @Transactional
+    public AuthResponse login(LoginRequest request, String deviceId) {
         var optUser = userRepository.findByPhone(request.phone());
 
         if (optUser.isPresent()) {
@@ -70,8 +75,19 @@ public class AuthService {
             if (!passwordEncoder.matches(request.password(), user.getPasswordHash())) {
                 throw new AppException("Invalid credentials", HttpStatus.UNAUTHORIZED);
             }
-            log.info("User logged in: {}", user.getId());
-            return buildAuthResponse(user, false);
+            
+            // Generate device ID if not provided
+            if (deviceId == null || deviceId.isBlank()) {
+                deviceId = java.util.UUID.randomUUID().toString();
+            }
+            
+            // Update active device
+            user.setActiveDeviceId(deviceId);
+            user.setDeviceLastActive(LocalDateTime.now());
+            userRepository.save(user);
+            
+            log.info("User logged in: {} (device: {})", user.getId(), deviceId);
+            return buildAuthResponse(user, false, deviceId);
         }
 
         User user = new User();
@@ -80,9 +96,17 @@ public class AuthService {
         user.setPasswordHash(passwordEncoder.encode(request.password()));
         user.setPublicId(generateUniquePublicId());
         user.setWalletAddress(generateWalletAddress());
+        
+        // Generate device ID if not provided
+        if (deviceId == null || deviceId.isBlank()) {
+            deviceId = java.util.UUID.randomUUID().toString();
+        }
+        user.setActiveDeviceId(deviceId);
+        user.setDeviceLastActive(LocalDateTime.now());
+        
         user = userRepository.save(user);
-        log.info("Auto-registered and logged in: {}", user.getId());
-        return buildAuthResponse(user, true);
+        log.info("Auto-registered and logged in: {} (device: {})", user.getId(), deviceId);
+        return buildAuthResponse(user, true, deviceId);
     }
 
     @Transactional
@@ -135,8 +159,12 @@ public class AuthService {
     }
 
     private AuthResponse buildAuthResponse(User user, boolean isNewRegistration) {
+        return buildAuthResponse(user, isNewRegistration, null);
+    }
+
+    private AuthResponse buildAuthResponse(User user, boolean isNewRegistration, String deviceId) {
         String userId = user.getId().toString();
-        String accessToken = jwtService.generateAccessToken(userId);
+        String accessToken = jwtService.generateAccessToken(userId, deviceId);
         String refreshToken = jwtService.generateRefreshToken(userId);
         saveRefreshToken(user, refreshToken);
 

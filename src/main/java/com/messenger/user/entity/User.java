@@ -62,6 +62,12 @@ public class User {
     @Column(name = "last_seen_at")
     private LocalDateTime lastSeenAt;
 
+    @Column(name = "active_device_id")
+    private String activeDeviceId;
+
+    @Column(name = "device_last_active")
+    private LocalDateTime deviceLastActive;
+
     @Column(name = "created_at")
     private LocalDateTime createdAt;
 
@@ -134,6 +140,12 @@ public class User {
 
     public LocalDateTime getLastSeenAt() { return lastSeenAt; }
     public void setLastSeenAt(LocalDateTime lastSeenAt) { this.lastSeenAt = lastSeenAt; }
+
+    public String getActiveDeviceId() { return activeDeviceId; }
+    public void setActiveDeviceId(String activeDeviceId) { this.activeDeviceId = activeDeviceId; }
+
+    public LocalDateTime getDeviceLastActive() { return deviceLastActive; }
+    public void setDeviceLastActive(LocalDateTime deviceLastActive) { this.deviceLastActive = deviceLastActive; }
 
     public LocalDateTime getCreatedAt() { return createdAt; }
     public LocalDateTime getUpdatedAt() { return updatedAt; }

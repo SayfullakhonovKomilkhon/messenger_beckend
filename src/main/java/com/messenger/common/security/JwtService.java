@@ -34,7 +34,11 @@ public class JwtService {
     }
 
     public String generateAccessToken(String userId) {
-        return buildToken(userId, accessExpiresSeconds, "access");
+        return generateAccessToken(userId, null);
+    }
+
+    public String generateAccessToken(String userId, String deviceId) {
+        return buildToken(userId, accessExpiresSeconds, "access", deviceId);
     }
 
     public String generateRefreshToken(String userId) {
@@ -43,6 +47,14 @@ public class JwtService {
 
     public String extractUserId(String token) {
         return parseClaims(token).getSubject();
+    }
+
+    public String extractDeviceId(String token) {
+        try {
+            return parseClaims(token).get("deviceId", String.class);
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     public boolean isTokenValid(String token) {
@@ -71,16 +83,25 @@ public class JwtService {
     }
 
     private String buildToken(String userId, long expiresSeconds, String type) {
+        return buildToken(userId, expiresSeconds, type, null);
+    }
+
+    private String buildToken(String userId, long expiresSeconds, String type, String deviceId) {
         Date now = new Date();
         Date expiry = new Date(now.getTime() + expiresSeconds * 1000);
-        return Jwts.builder()
+        var builder = Jwts.builder()
                 .id(UUID.randomUUID().toString())
                 .subject(userId)
                 .claim("type", type)
                 .issuedAt(now)
                 .expiration(expiry)
-                .signWith(secretKey)
-                .compact();
+                .signWith(secretKey);
+        
+        if (deviceId != null) {
+            builder.claim("deviceId", deviceId);
+        }
+        
+        return builder.compact();
     }
 
     private Claims parseClaims(String token) {

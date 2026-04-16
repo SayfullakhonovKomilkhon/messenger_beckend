@@ -41,10 +41,12 @@ public class AuthController {
 
     @Operation(summary = "Логин", description = "Авторизация по телефону и паролю. Возвращает JWT токены.")
     @PostMapping("/login")
-    public ResponseEntity<AuthResponse> login(@RequestBody @Valid LoginRequest request,
-                                               HttpServletRequest httpRequest) {
+    public ResponseEntity<AuthResponse> login(
+            @RequestBody @Valid LoginRequest request,
+            @RequestHeader(value = "X-Device-Id", required = false) String deviceId,
+            HttpServletRequest httpRequest) {
         consumeToken(httpRequest);
-        return ResponseEntity.ok(authService.login(request));
+        return ResponseEntity.ok(authService.login(request, deviceId));
     }
 
     @Operation(summary = "Обновление токена", description = "Обмен refresh токена на новую пару access + refresh.")
