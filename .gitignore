@@ -27,3 +27,18 @@ uploads/
 # Firebase credentials (secret)
 *firebase-adminsdk*.json
 firebase-service-account.json
+
+# Mobile app
+mobile/
+
+# Documentation
+memory-bank/
+E2EE_IMPLEMENTATION_PLAN.md
+E2EE_TESTING_PLAN.md
+GROUP_E2EE_TESTING_PLAN.md
+
+# IDE
+.cursor/
+
+# Nested backend folder
+backend/
