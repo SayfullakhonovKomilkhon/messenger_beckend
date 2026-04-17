@@ -32,4 +32,12 @@ public interface GroupSenderKeyRepository extends JpaRepository<GroupSenderKeyEn
     @Modifying
     @Query("DELETE FROM GroupSenderKeyEntity g WHERE g.groupId = :groupId")
     void deleteAllByGroupId(UUID groupId);
+
+    @Modifying
+    @Query("DELETE FROM GroupSenderKeyEntity g WHERE g.senderId = :userId")
+    void deleteAllBySender(UUID userId);
+
+    @Modifying
+    @Query("DELETE FROM GroupSenderKeyEntity g WHERE g.recipientId = :userId")
+    void deleteAllByRecipient(UUID userId);
 }

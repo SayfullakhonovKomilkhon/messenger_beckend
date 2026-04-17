@@ -5,6 +5,7 @@ import com.messenger.e2ee.dto.*;
 import com.messenger.e2ee.entity.IdentityKeyEntity;
 import com.messenger.e2ee.entity.PreKeyEntity;
 import com.messenger.e2ee.entity.SignedPreKeyEntity;
+import com.messenger.e2ee.repository.GroupSenderKeyRepository;
 import com.messenger.e2ee.repository.IdentityKeyRepository;
 import com.messenger.e2ee.repository.PreKeyRepository;
 import com.messenger.e2ee.repository.SignedPreKeyRepository;
@@ -25,18 +26,34 @@ public class E2eeKeyService {
     private final IdentityKeyRepository identityKeyRepo;
     private final SignedPreKeyRepository signedPreKeyRepo;
     private final PreKeyRepository preKeyRepo;
+    private final GroupSenderKeyRepository groupSenderKeyRepo;
 
     public E2eeKeyService(IdentityKeyRepository identityKeyRepo,
                           SignedPreKeyRepository signedPreKeyRepo,
-                          PreKeyRepository preKeyRepo) {
+                          PreKeyRepository preKeyRepo,
+                          GroupSenderKeyRepository groupSenderKeyRepo) {
         this.identityKeyRepo = identityKeyRepo;
         this.signedPreKeyRepo = signedPreKeyRepo;
         this.preKeyRepo = preKeyRepo;
+        this.groupSenderKeyRepo = groupSenderKeyRepo;
     }
 
+    /**
+     * Register or fully rotate a user's E2EE key material. Idempotent: when called
+     * after a reinstall/relogin the server wipes any previous pre-keys, signed
+     * pre-keys and group sender-keys tied to this user before inserting the new
+     * set. Without this wipe the UNIQUE(user_id, key_id) constraint on
+     * e2ee_pre_keys raised DataIntegrityViolation → 409 CONFLICT, leaving the
+     * client with fresh local private keys while the server kept stale public
+     * keys, which broke every subsequent decryption with "Bad Mac!".
+     */
     @Transactional
     public void registerKeys(UUID userId, RegisterKeysRequest request) {
         IdentityKeyEntity identity = identityKeyRepo.findById(userId).orElse(null);
+        boolean identityRotated = identity != null && !java.util.Arrays.equals(
+                identity.getIdentityPublicKey(),
+                Base64.getDecoder().decode(request.identityPublicKey())
+        );
         if (identity == null) {
             identity = new IdentityKeyEntity();
             identity.setUserId(userId);
@@ -45,7 +62,15 @@ public class E2eeKeyService {
         identity.setIdentityPublicKey(Base64.getDecoder().decode(request.identityPublicKey()));
         identityKeyRepo.save(identity);
 
+        preKeyRepo.deleteAllByUserId(userId);
         signedPreKeyRepo.deleteAllByUserId(userId);
+
+        if (identityRotated) {
+            groupSenderKeyRepo.deleteAllBySender(userId);
+            groupSenderKeyRepo.deleteAllByRecipient(userId);
+            log.info("User {} identity rotated — wiped group sender keys for rebuild", userId);
+        }
+
         SignedPreKeyEntity spk = new SignedPreKeyEntity();
         spk.setUserId(userId);
         spk.setKeyId(request.signedPreKey().keyId());
@@ -61,7 +86,8 @@ public class E2eeKeyService {
             preKeyRepo.save(preKey);
         }
 
-        log.info("User {} registered E2EE keys: {} pre-keys uploaded", userId, request.preKeys().size());
+        log.info("User {} registered E2EE keys: {} pre-keys uploaded (rotated={})",
+                userId, request.preKeys().size(), identityRotated);
     }
 
     @Transactional
