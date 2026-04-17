@@ -17,5 +17,6 @@ public record SendMessageRequest(
         UUID replyToId,
         Boolean encrypted,
         String encryptedFileKey,
-        String fileIv
+        String fileIv,
+        UUID mediaGroupId
 ) {}

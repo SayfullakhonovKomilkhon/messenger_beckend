@@ -26,5 +26,6 @@ public record MessageResponse(
         LocalDateTime editedAt,
         Boolean encrypted,
         String encryptedFileKey,
-        String fileIv
+        String fileIv,
+        String mediaGroupId
 ) {}

@@ -212,6 +212,9 @@ public class ChatService {
             message.setEncryptedFileKey(request.encryptedFileKey());
             message.setFileIv(request.fileIv());
         }
+        if (request.mediaGroupId() != null) {
+            message.setMediaGroupId(request.mediaGroupId());
+        }
         message = messageRepository.save(message);
 
         Conversation conv = conversationRepository.findById(request.conversationId())
@@ -865,7 +868,8 @@ public class ChatService {
                 message.getEditedAt(),
                 message.getEncrypted(),
                 message.getEncryptedFileKey(),
-                message.getFileIv()
+                message.getFileIv(),
+                message.getMediaGroupId() != null ? message.getMediaGroupId().toString() : null
         );
     }
 }

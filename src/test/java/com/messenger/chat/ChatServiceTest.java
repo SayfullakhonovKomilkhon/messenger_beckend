@@ -78,7 +78,7 @@ class ChatServiceTest {
         String clientMsgId = UUID.randomUUID().toString();
         SendMessageRequest request = new SendMessageRequest(
                 convId, "Hello", null, null, clientMsgId,
-                null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null, null);
 
         MessageResponse first = chatService.sendMessage(user1.getId(), request);
         MessageResponse second = chatService.sendMessage(user1.getId(), request);

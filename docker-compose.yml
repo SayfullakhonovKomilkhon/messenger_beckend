@@ -32,7 +32,7 @@ services:
       PGPASSWORD: M3ss3ng3r_Str0ng_Pwd!
       REDIS_URL: redis://redis:6379
       JWT_SECRET: DemosMessenger_VPS_JWT_Secret_Key_2026_very_long_and_secure_256bit
-      JWT_ACCESS_EXPIRES: 3600
+      JWT_ACCESS_EXPIRES: 900
       JWT_REFRESH_EXPIRES: 2592000
       FILE_UPLOAD_DIR: /app/uploads
       FILE_PUBLIC_BASE_URL: http://31.130.150.246:3000/uploads

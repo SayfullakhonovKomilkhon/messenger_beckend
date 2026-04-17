@@ -241,8 +241,8 @@ export JWT_SECRET=your-256-bit-secret-key
 | `PGPASSWORD` | Yes | — | Database password |
 | `REDIS_URL` | Yes | — | Redis connection URL |
 | `JWT_SECRET` | Yes | — | JWT signing secret (256-bit) |
-| `JWT_ACCESS_EXPIRES` | No | `3600` | Access token TTL (seconds) |
-| `JWT_REFRESH_EXPIRES` | No | `2592000` | Refresh token TTL (seconds) |
+| `JWT_ACCESS_EXPIRES` | No | `900` | Access token TTL (seconds, 15 min) |
+| `JWT_REFRESH_EXPIRES` | No | `2592000` | Refresh token TTL (seconds, 30 days) |
 | `FILE_UPLOAD_DIR` | No | `uploads` | File storage path |
 | `FILE_PUBLIC_BASE_URL` | No | `http://localhost:3000/uploads` | Public URL for files |
 | `FCM_SERVICE_ACCOUNT_FILE` | No | — | Path to Firebase service account JSON |

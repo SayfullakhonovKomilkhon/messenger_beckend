@@ -72,6 +72,15 @@ public class Message {
     @Column(name = "file_iv")
     private String fileIv;
 
+    /**
+     * Shared identifier for photos/videos sent together as a single album
+     * (Telegram-style grouping). NULL for ordinary, standalone messages.
+     * Consecutive messages with the same value and same sender are rendered
+     * as one grouped bubble by the client.
+     */
+    @Column(name = "media_group_id")
+    private UUID mediaGroupId;
+
     @PrePersist
     protected void onCreate() {
         createdAt = LocalDateTime.now();
@@ -138,4 +147,7 @@ public class Message {
 
     public String getFileIv() { return fileIv; }
     public void setFileIv(String fileIv) { this.fileIv = fileIv; }
+
+    public UUID getMediaGroupId() { return mediaGroupId; }
+    public void setMediaGroupId(UUID mediaGroupId) { this.mediaGroupId = mediaGroupId; }
 }
