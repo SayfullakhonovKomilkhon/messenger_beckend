@@ -49,4 +49,14 @@ public class E2eeKeyController {
     public ResponseEntity<Boolean> hasKeys(@PathVariable UUID userId) {
         return ResponseEntity.ok(keyService.hasKeys(userId));
     }
+
+    /**
+     * Returns ONLY the remote identity key + registrationId without consuming a
+     * one-time pre-key. Allows senders to verify the recipient's current identity
+     * and detect client reinstalls (identity rotation) before encrypting.
+     */
+    @GetMapping("/identity/{userId}")
+    public ResponseEntity<IdentityKeyResponse> getIdentity(@PathVariable UUID userId) {
+        return ResponseEntity.ok(keyService.getIdentity(userId));
+    }
 }

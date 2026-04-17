@@ -116,4 +116,20 @@ public class E2eeKeyService {
     public boolean hasKeys(UUID userId) {
         return identityKeyRepo.existsById(userId);
     }
+
+    /**
+     * Lightweight identity-only lookup. Does NOT consume a one-time pre-key.
+     * Used by senders to detect when a recipient rotated their identity (e.g. reinstall)
+     * so they can rebuild their Signal session and avoid sending messages encrypted
+     * with stale session state.
+     */
+    public IdentityKeyResponse getIdentity(UUID targetUserId) {
+        IdentityKeyEntity identity = identityKeyRepo.findById(targetUserId)
+                .orElseThrow(() -> new AppException("User has no E2EE keys", HttpStatus.NOT_FOUND));
+        return new IdentityKeyResponse(
+                targetUserId.toString(),
+                identity.getRegistrationId(),
+                Base64.getEncoder().encodeToString(identity.getIdentityPublicKey())
+        );
+    }
 }

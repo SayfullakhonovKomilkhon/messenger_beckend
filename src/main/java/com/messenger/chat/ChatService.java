@@ -344,6 +344,25 @@ public class ChatService {
         }
     }
 
+    /**
+     * Forwards a session-reset notification from {@code requesterId} to {@code peerId}.
+     * Sent by a receiver whose Signal decryption permanently failed. The peer (sender of
+     * the undecryptable message) should drop their cached Signal session for requesterId
+     * so the next message is sent as a fresh PreKeyMessage. This happens naturally when
+     * a client rotates their identity (e.g. app reinstall wipes the local keystore).
+     */
+    public void notifySessionReset(UUID requesterId, SessionResetRequest request) {
+        UUID peerId = request.peerId();
+        if (peerId == null || peerId.equals(requesterId)) return;
+
+        Map<String, Object> event = Map.of(
+                "type", "session_reset",
+                "peerId", requesterId.toString()
+        );
+        notificationService.sendToUser(peerId, "/queue/session-reset", event);
+        log.info("Session reset requested by {} -> {}", requesterId, peerId);
+    }
+
     @Transactional
     public void editMessageAndNotify(UUID userId, EditMessageRequest request) {
         Message message = messageRepository.findById(request.messageId())

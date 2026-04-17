@@ -63,4 +63,15 @@ public class ChatWebSocketHandler {
         UUID userId = UUID.fromString(principal.getName());
         chatService.unpinMessageAndNotify(userId, request);
     }
+
+    /**
+     * Used by a receiver whose Signal decryption from a peer permanently failed
+     * (peer rotated identity, e.g. via reinstall). Backend forwards the event to the
+     * peer so they drop their stale Signal session before sending the next message.
+     */
+    @MessageMapping("/chat.session.reset")
+    public void sessionReset(SessionResetRequest request, Principal principal) {
+        UUID userId = UUID.fromString(principal.getName());
+        chatService.notifySessionReset(userId, request);
+    }
 }
