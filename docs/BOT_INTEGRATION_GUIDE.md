@@ -77,6 +77,36 @@
 3. Решить, что ответить.
 4. Вызвать **`POST /api/v1/bot/sendMessage`** с телом, где есть `conversationId` и хотя бы одно из: `text`, `fileUrl` (см. раздел 6).
 
+### 4.1. Проверка подписи (обязательна в проде)
+
+Каждый webhook-POST сопровождается заголовками:
+
+```
+X-Bot-Id: <UUID бота>
+X-Bot-Signature: t=<unix_ts>,v1=<hex(HMAC-SHA256)>
+```
+
+Где `v1` = `HMAC_SHA256(secret = bot.token, message = "<unix_ts>.<raw_body_bytes>")` в hex-lowercase. Формат намеренно сделан такой же, как у Stripe — легко портируется.
+
+Пример проверки на Node.js:
+
+```js
+const crypto = require('crypto');
+
+function verify(req, botToken) {
+  const header = req.headers['x-bot-signature'] || '';
+  const parts = Object.fromEntries(header.split(',').map(p => p.split('=')));
+  const expected = crypto
+    .createHmac('sha256', botToken)
+    .update(parts.t + '.' + req.rawBody)  // req.rawBody — сырые байты до JSON.parse
+    .digest('hex');
+  // constant-time compare
+  return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(parts.v1));
+}
+```
+
+Если подпись не сходится — **отбросьте запрос**. Отсутствие проверки = возможность подделать вход от имени backend'а.
+
 ---
 
 ## 5. API владельца бота (JWT пользователя)
@@ -114,6 +144,17 @@ Authorization: Bot <секретный_токен_из_ответа_create_ил�
 | `POST /api/v1/bot/setWebhook` | Тело: `{"url":"https://..."}`. Сохраняет вебхук в БД (пустая строка можно трактовать как очистку — уточняйте по реализации `updateWebhookUrl` на backend). |
 
 Если `is_active == false`, операции отправки/чтения через фасад сообщений для бота **запрещены** (ошибка вроде «бот выключен»).
+
+### 6.1. Rate-limit
+
+`sendMessage` ограничен **per-bot**: по умолчанию **5 msg/sec** и **60 msg/min**. Превышение → **HTTP 429** с телом `AppException`. Настраивается через env:
+
+| Переменная | Дефолт |
+|------------|--------|
+| `BOT_RATELIMIT_PER_SECOND` | `5` |
+| `BOT_RATELIMIT_PER_MINUTE` | `60` |
+
+Клиентский код должен уметь делать retry с backoff (например, `Retry-After` будущий патч — сейчас используйте статический 1s / 60s).
 
 ---
 

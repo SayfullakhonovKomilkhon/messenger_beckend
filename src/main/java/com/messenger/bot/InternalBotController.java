@@ -25,10 +25,14 @@ public class InternalBotController {
 
     private final BotService botService;
     private final BotMessagingFacade messagingFacade;
+    private final BotRateLimiter rateLimiter;
 
-    public InternalBotController(BotService botService, BotMessagingFacade messagingFacade) {
+    public InternalBotController(BotService botService,
+                                 BotMessagingFacade messagingFacade,
+                                 BotRateLimiter rateLimiter) {
         this.botService = botService;
         this.messagingFacade = messagingFacade;
+        this.rateLimiter = rateLimiter;
     }
 
     @PostMapping("/sendMessage")
@@ -36,6 +40,7 @@ public class InternalBotController {
             @RequestHeader("Authorization") String authHeader,
             @Valid @RequestBody BotSendMessageRequest request) {
         Bot bot = resolveBot(authHeader);
+        rateLimiter.checkSendMessage(bot.getId());
         return ResponseEntity.ok(messagingFacade.sendMessage(bot, request));
     }
 

@@ -7,8 +7,6 @@ import com.messenger.chat.entity.ConversationType;
 import com.messenger.chat.entity.GroupRole;
 import com.messenger.chat.entity.Message;
 import com.messenger.chat.event.MessageSentEvent;
-import com.messenger.bot.BotRepository;
-import com.messenger.bot.entity.Bot;
 import com.messenger.common.exception.AppException;
 import com.messenger.common.notification.NotificationService;
 import com.messenger.user.BlockService;
@@ -43,7 +41,7 @@ public class ChatService {
     private final NotificationService notificationService;
     private final BlockService blockService;
     private final ApplicationEventPublisher eventPublisher;
-    private final BotRepository botRepository;
+    private final ParticipantProfileResolver profileResolver;
 
     public ChatService(ConversationRepository conversationRepository,
                        MessageRepository messageRepository,
@@ -52,7 +50,7 @@ public class ChatService {
                        NotificationService notificationService,
                        BlockService blockService,
                        ApplicationEventPublisher eventPublisher,
-                       BotRepository botRepository) {
+                       ParticipantProfileResolver profileResolver) {
         this.conversationRepository = conversationRepository;
         this.messageRepository = messageRepository;
         this.participantRepository = participantRepository;
@@ -60,7 +58,7 @@ public class ChatService {
         this.notificationService = notificationService;
         this.blockService = blockService;
         this.eventPublisher = eventPublisher;
-        this.botRepository = botRepository;
+        this.profileResolver = profileResolver;
     }
 
     @Transactional(readOnly = true)
@@ -709,11 +707,10 @@ public class ChatService {
         String sm = myCp.getSearchMethod();
         if (sm == null) sm = otherCp.getSearchMethod();
 
-        Optional<Bot> linkedBot = Boolean.TRUE.equals(other.getIsBot())
-                ? botRepository.findByUserId(other.getId()) : Optional.empty();
-        boolean isBot = linkedBot.isPresent();
-        String displayName = linkedBot.map(Bot::getName).orElse(other.getName());
-        String displayAvatar = linkedBot.map(Bot::getAvatarUrl).orElse(other.getAvatarUrl());
+        ParticipantProfileResolver.Profile otherProfile = profileResolver.resolve(other);
+        boolean isBot = otherProfile.isBot();
+        String displayName = otherProfile.displayName();
+        String displayAvatar = otherProfile.avatarUrl();
 
         ConversationResponse.ParticipantInfo pInfo;
         if (mutualTrust) {
@@ -766,10 +763,9 @@ public class ChatService {
         List<ConversationResponse.GroupMemberInfo> memberInfos = participants.stream()
                 .map(cp -> {
                     User u = cp.getUser();
-                    Optional<Bot> b = Boolean.TRUE.equals(u.getIsBot())
-                            ? botRepository.findByUserId(u.getId()) : Optional.empty();
-                    String nm = b.map(Bot::getName).orElse(u.getName());
-                    String av = b.map(Bot::getAvatarUrl).orElse(u.getAvatarUrl());
+                    ParticipantProfileResolver.Profile p = profileResolver.resolve(u);
+                    String nm = p.displayName();
+                    String av = p.avatarUrl();
                     return new ConversationResponse.GroupMemberInfo(
                             u.getId().toString(),
                             nm,
@@ -806,10 +802,7 @@ public class ChatService {
     }
 
     private String resolveUserDisplayName(User user) {
-        if (Boolean.TRUE.equals(user.getIsBot())) {
-            return botRepository.findByUserId(user.getId()).map(Bot::getName).orElse(user.getName());
-        }
-        return user.getName();
+        return profileResolver.resolve(user).displayName();
     }
 
     private MessageResponse toMessageResponse(Message message) {
@@ -817,14 +810,9 @@ public class ChatService {
         String senderAvatar = null;
         User sender = userRepository.findById(message.getSenderId()).orElse(null);
         if (sender != null) {
-            if (Boolean.TRUE.equals(sender.getIsBot())) {
-                Optional<Bot> bot = botRepository.findByUserId(sender.getId());
-                senderName = bot.map(Bot::getName).orElse(sender.getName());
-                senderAvatar = bot.map(Bot::getAvatarUrl).orElse(sender.getAvatarUrl());
-            } else {
-                senderName = sender.getName();
-                senderAvatar = sender.getAvatarUrl();
-            }
+            ParticipantProfileResolver.Profile p = profileResolver.resolve(sender);
+            senderName = p.displayName();
+            senderAvatar = p.avatarUrl();
         }
 
         String forwardedFromName = null;
@@ -833,13 +821,7 @@ public class ChatService {
             if (originalMsg != null) {
                 User originalSender = userRepository.findById(originalMsg.getSenderId()).orElse(null);
                 if (originalSender != null) {
-                    if (Boolean.TRUE.equals(originalSender.getIsBot())) {
-                        forwardedFromName = botRepository.findByUserId(originalSender.getId())
-                                .map(Bot::getName)
-                                .orElse(originalSender.getName());
-                    } else {
-                        forwardedFromName = originalSender.getName();
-                    }
+                    forwardedFromName = profileResolver.resolve(originalSender).displayName();
                 }
             }
         }

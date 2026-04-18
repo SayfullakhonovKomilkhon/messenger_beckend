@@ -66,6 +66,24 @@ fcm:
 messenger:
   internal-bot-gateway-key: ${INTERNAL_BOT_GATEWAY_KEY:}
 
+# Bot subsystem tuning. Defaults are chosen so a single noisy bot can't
+# starve chat traffic; override per-environment via env vars.
+bot:
+  ratelimit:
+    send:
+      # Per-second + per-minute budget applied to /internal/v1/bot/sendMessage
+      # (keyed on bot.id). Returns HTTP 429 when exceeded.
+      per-second: ${BOT_RATELIMIT_PER_SECOND:5}
+      per-minute: ${BOT_RATELIMIT_PER_MINUTE:60}
+  webhook:
+    # Bounded executor for outgoing webhooks (see BotWebhookConfig).
+    pool:
+      core-size: ${BOT_WEBHOOK_POOL_CORE:4}
+      max-size: ${BOT_WEBHOOK_POOL_MAX:16}
+      queue-capacity: ${BOT_WEBHOOK_POOL_QUEUE:500}
+    connect-timeout-ms: ${BOT_WEBHOOK_CONNECT_TIMEOUT_MS:3000}
+    read-timeout-ms: ${BOT_WEBHOOK_READ_TIMEOUT_MS:5000}
+
 logging:
   level:
     root: INFO
