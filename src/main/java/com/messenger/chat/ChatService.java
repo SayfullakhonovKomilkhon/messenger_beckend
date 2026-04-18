@@ -346,6 +346,26 @@ public class ChatService {
     }
 
     /**
+     * Broadcasts a synthetic "bot is typing" indicator to the other participants
+     * of a conversation while a bot's webhook is being processed externally.
+     * The mobile client treats this identically to a human typing event and
+     * hides it automatically after ~3s if no follow-up arrives — so we don't
+     * need a separate "stop typing" signal: it will either be superseded by an
+     * actual bot message or time out on its own.
+     */
+    public void notifyBotTyping(UUID botUserId, UUID conversationId) {
+        if (botUserId == null || conversationId == null) return;
+        Map<String, Object> typingEvent = Map.of(
+                "conversationId", conversationId.toString(),
+                "userId", botUserId.toString()
+        );
+        List<UUID> otherIds = getOtherParticipantIds(conversationId, botUserId);
+        for (UUID otherId : otherIds) {
+            notificationService.sendTypingEvent(otherId, typingEvent);
+        }
+    }
+
+    /**
      * Forwards a session-reset notification from {@code requesterId} to {@code peerId}.
      * Sent by a receiver whose Signal decryption permanently failed. The peer (sender of
      * the undecryptable message) should drop their cached Signal session for requesterId

@@ -3,6 +3,7 @@ package com.messenger.bot;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.messenger.bot.entity.Bot;
+import com.messenger.chat.ChatService;
 import com.messenger.chat.dto.MessageResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -21,6 +22,10 @@ import java.time.Instant;
 import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Dispatches incoming messages to bot webhook URLs on a bounded thread pool
@@ -37,11 +42,25 @@ public class BotWebhookDispatcher {
 
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper;
+    private final ChatService chatService;
+
+    // Lightweight scheduler that keeps the "bot is typing" indicator alive
+    // while a webhook is being processed. The client-side indicator auto-hides
+    // after 3s, so a 2s refresh interval gives us a comfortable safety margin
+    // without flooding WebSocket subscribers.
+    private final ScheduledExecutorService typingRefresher =
+            new ScheduledThreadPoolExecutor(1, r -> {
+                Thread t = new Thread(r, "bot-typing-refresher");
+                t.setDaemon(true);
+                return t;
+            });
 
     public BotWebhookDispatcher(@Qualifier("botWebhookRestTemplate") RestTemplate restTemplate,
-                                ObjectMapper objectMapper) {
+                                ObjectMapper objectMapper,
+                                ChatService chatService) {
         this.restTemplate = restTemplate;
         this.objectMapper = objectMapper;
+        this.chatService = chatService;
     }
 
     @Async(BotWebhookConfig.EXECUTOR_BEAN_NAME)
@@ -49,6 +68,25 @@ public class BotWebhookDispatcher {
         String webhookUrl = bot.getWebhookUrl();
         if (webhookUrl == null || webhookUrl.isBlank()) {
             return;
+        }
+
+        // Best-effort "typing" signal for the entire duration of the webhook
+        // round-trip, so the sender sees "печатает" instead of a frozen chat.
+        // We fire immediately and then refresh every 2s until the HTTP call
+        // completes — or until a 10s hard cap to avoid leaking a ghost
+        // indicator if the remote server hangs longer than our read timeout.
+        UUID convId = parseUuid(message.conversationId());
+        final java.util.concurrent.ScheduledFuture<?>[] refresherHolder =
+                new java.util.concurrent.ScheduledFuture<?>[1];
+        if (convId != null && bot.getUserId() != null) {
+            safeNotifyTyping(bot.getUserId(), convId);
+            refresherHolder[0] = typingRefresher.scheduleAtFixedRate(
+                    () -> safeNotifyTyping(bot.getUserId(), convId),
+                    2, 2, TimeUnit.SECONDS);
+            // Hard stop after 10s so we never out-live a hung webhook.
+            typingRefresher.schedule(() -> {
+                if (refresherHolder[0] != null) refresherHolder[0].cancel(false);
+            }, 10, TimeUnit.SECONDS);
         }
 
         try {
@@ -83,6 +121,25 @@ public class BotWebhookDispatcher {
             log.error("Webhook payload serialisation failed for bot {}: {}", bot.getId(), e.getMessage());
         } catch (Exception e) {
             log.warn("Webhook failed for bot {} at {}: {}", bot.getId(), webhookUrl, e.getMessage());
+        } finally {
+            if (refresherHolder[0] != null) refresherHolder[0].cancel(false);
+        }
+    }
+
+    private void safeNotifyTyping(UUID botUserId, UUID conversationId) {
+        try {
+            chatService.notifyBotTyping(botUserId, conversationId);
+        } catch (Exception e) {
+            log.debug("Bot typing broadcast failed: {}", e.getMessage());
+        }
+    }
+
+    private UUID parseUuid(String raw) {
+        if (raw == null || raw.isBlank()) return null;
+        try {
+            return UUID.fromString(raw);
+        } catch (IllegalArgumentException e) {
+            return null;
         }
     }
 
