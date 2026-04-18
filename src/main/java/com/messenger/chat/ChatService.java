@@ -730,59 +730,74 @@ public class ChatService {
         );
     }
 
+    /**
+     * Decides how a single participant should appear to other members of the
+     * conversation based on their own {@code trust_status}. Trust here is
+     * <b>self-reveal</b>: a participant's real name/avatar/online status is
+     * only exposed once they set their own cp.trust_status to TRUSTED.
+     *
+     * <p>Legacy rows (trust_status == null) are treated as TRUSTED so we don't
+     * retroactively hide anyone who joined before this feature shipped. Bots
+     * are always TRUSTED — they can't press "reveal me" and bot identity is
+     * meant to be public.
+     */
+    private ResolvedDisplay resolveDisplay(User user, String selfTrustStatus) {
+        ParticipantProfileResolver.Profile p = profileResolver.resolve(user);
+        boolean isBot = p.isBot();
+        boolean revealed = isBot
+                || selfTrustStatus == null
+                || "TRUSTED".equals(selfTrustStatus);
+        if (revealed) {
+            return new ResolvedDisplay(
+                    p.displayName(), p.avatarUrl(), user.getIsOnline(),
+                    user.getPublicId(), isBot, true
+            );
+        }
+        return new ResolvedDisplay(
+                null, null, null,
+                user.getPublicId(), isBot, false
+        );
+    }
+
+    private record ResolvedDisplay(
+            String name,
+            String avatarUrl,
+            Boolean isOnline,
+            String publicId,
+            boolean isBot,
+            boolean revealed
+    ) {}
+
     private ConversationResponse buildDirectConversationResponse(
             UUID convId, Conversation conv, ConversationParticipant myCp,
             ConversationParticipant otherCp, ConversationResponse.LastMessageInfo lastMsg) {
         User other = otherCp.getUser();
-        ParticipantProfileResolver.Profile otherProfile = profileResolver.resolve(other);
-        boolean isBot = otherProfile.isBot();
-        // Bot chats bypass the trust handshake (bots can't press "accept"),
-        // so treat them as implicitly mutually trusted for response shaping.
-        boolean mutualTrust = isBot
-                || ("TRUSTED".equals(myCp.getTrustStatus())
-                        && "TRUSTED".equals(otherCp.getTrustStatus()));
+        // Self-reveal: the other party's display data is gated by *their own*
+        // trust_status — they control what we show to the requesting user.
+        // Bots are always revealed (resolveDisplay handles that).
+        ResolvedDisplay otherDisplay = resolveDisplay(other, otherCp.getTrustStatus());
 
-        String sm = myCp.getSearchMethod();
-        if (sm == null) sm = otherCp.getSearchMethod();
-
-        String displayName = otherProfile.displayName();
-        String displayAvatar = otherProfile.avatarUrl();
-
-        // For legacy bot conversations created before this fix the DB might
-        // still have PENDING on either side — normalise what we return to the
-        // client so the trust banner no longer shows up.
-        String myTrust = isBot ? "TRUSTED" : myCp.getTrustStatus();
-        String otherTrust = isBot ? "TRUSTED" : otherCp.getTrustStatus();
-
-        ConversationResponse.ParticipantInfo pInfo;
-        if (mutualTrust) {
-            pInfo = new ConversationResponse.ParticipantInfo(
-                    other.getId().toString(),
-                    other.getPublicId(),
-                    displayName,
-                    other.getAiName(),
-                    displayAvatar,
-                    other.getIsOnline(),
-                    isBot
-            );
-        } else {
-            String visibleName = null;
-            if ("name".equals(sm)) {
-                visibleName = displayName;
-            }
-            pInfo = new ConversationResponse.ParticipantInfo(
-                    other.getId().toString(),
-                    "publicId".equals(sm) ? other.getPublicId() : null,
-                    visibleName,
-                    "aiName".equals(sm) ? other.getAiName() : null,
-                    null,
-                    other.getIsOnline(),
-                    isBot
-            );
-        }
+        // publicId is always returned: when the user hasn't revealed themselves
+        // the client uses it as a stable fallback label instead of showing
+        // nothing. aiName is tied to the (legacy) search-by-aiName flow.
+        ConversationResponse.ParticipantInfo pInfo = new ConversationResponse.ParticipantInfo(
+                other.getId().toString(),
+                other.getPublicId(),
+                otherDisplay.name(),
+                otherDisplay.revealed() ? other.getAiName() : null,
+                otherDisplay.avatarUrl(),
+                otherDisplay.isOnline(),
+                otherDisplay.isBot()
+        );
 
         String effectiveSm = myCp.getSearchMethod();
         if (effectiveSm == null) effectiveSm = otherCp.getSearchMethod();
+
+        // For bot chats we still want the mobile UI to treat both sides as
+        // TRUSTED (hides the legacy trust banner entirely).
+        boolean isBotChat = otherDisplay.isBot();
+        String myTrust = isBotChat ? "TRUSTED" : myCp.getTrustStatus();
+        String otherTrust = isBotChat ? "TRUSTED" : otherCp.getTrustStatus();
 
         return new ConversationResponse(
                 convId.toString(),
@@ -805,16 +820,16 @@ public class ChatService {
         List<ConversationResponse.GroupMemberInfo> memberInfos = participants.stream()
                 .map(cp -> {
                     User u = cp.getUser();
-                    ParticipantProfileResolver.Profile p = profileResolver.resolve(u);
-                    String nm = p.displayName();
-                    String av = p.avatarUrl();
+                    ResolvedDisplay d = resolveDisplay(u, cp.getTrustStatus());
                     return new ConversationResponse.GroupMemberInfo(
                             u.getId().toString(),
-                            nm,
-                            av,
-                            u.getIsOnline(),
+                            d.name(),
+                            d.avatarUrl(),
+                            d.isOnline(),
                             cp.getRole() != null ? cp.getRole().name() : "MEMBER",
-                            cp.getJoinedAt()
+                            cp.getJoinedAt(),
+                            d.publicId(),
+                            cp.getTrustStatus()
                     );
                 })
                 .toList();
@@ -829,6 +844,8 @@ public class ChatService {
                 memberInfos
         );
 
+        // Expose the requesting user's own trust_status so the mobile client
+        // can show the "Reveal me in this group" banner just like in 1-to-1.
         return new ConversationResponse(
                 conv.getId().toString(),
                 "GROUP",
@@ -839,7 +856,7 @@ public class ChatService {
                 myCp.getUnreadCount() != null ? myCp.getUnreadCount() : 0,
                 Boolean.TRUE.equals(myCp.getIsPinned()),
                 Boolean.TRUE.equals(myCp.getIsMuted()),
-                null, null, null
+                myCp.getTrustStatus(), null, null
         );
     }
 
@@ -852,9 +869,17 @@ public class ChatService {
         String senderAvatar = null;
         User sender = userRepository.findById(message.getSenderId()).orElse(null);
         if (sender != null) {
-            ParticipantProfileResolver.Profile p = profileResolver.resolve(sender);
-            senderName = p.displayName();
-            senderAvatar = p.avatarUrl();
+            // Sender's displayed identity in message headers is governed by
+            // their own self-reveal status in this conversation. If they
+            // haven't opted in, we return null and let the client fall back
+            // to publicId (which is already in GroupMemberInfo / ParticipantInfo).
+            ConversationParticipant senderCp = conversationRepository
+                    .findParticipant(message.getConversationId(), sender.getId())
+                    .orElse(null);
+            String senderTrust = senderCp != null ? senderCp.getTrustStatus() : null;
+            ResolvedDisplay d = resolveDisplay(sender, senderTrust);
+            senderName = d.name();
+            senderAvatar = d.avatarUrl();
         }
 
         String forwardedFromName = null;
@@ -863,7 +888,15 @@ public class ChatService {
             if (originalMsg != null) {
                 User originalSender = userRepository.findById(originalMsg.getSenderId()).orElse(null);
                 if (originalSender != null) {
-                    forwardedFromName = profileResolver.resolve(originalSender).displayName();
+                    // Forwarded-from name is also gated by the original
+                    // sender's trust in the *source* conversation. If we
+                    // can't find it (e.g. forwarded from a deleted chat),
+                    // we keep it null — clients already handle that.
+                    ConversationParticipant origCp = conversationRepository
+                            .findParticipant(originalMsg.getConversationId(), originalSender.getId())
+                            .orElse(null);
+                    String origTrust = origCp != null ? origCp.getTrustStatus() : null;
+                    forwardedFromName = resolveDisplay(originalSender, origTrust).name();
                 }
             }
         }

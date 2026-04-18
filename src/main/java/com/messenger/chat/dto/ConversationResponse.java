@@ -59,8 +59,24 @@ public record ConversationResponse(
             String avatarUrl,
             Boolean isOnline,
             String role,
-            LocalDateTime joinedAt
-    ) {}
+            LocalDateTime joinedAt,
+            // publicId is always returned — clients can use it as a stable
+            // fallback label when {@code name} is null because the member has
+            // not opted into revealing themselves (trustStatus != TRUSTED).
+            String publicId,
+            // "PENDING" / "TRUSTED" / "DECLINED" / null (legacy). When non-TRUSTED
+            // the server masks name/avatar/isOnline to null so the client must
+            // fall back to publicId.
+            String trustStatus
+    ) {
+        // Backwards-compat constructor for older callers that don't yet
+        // populate publicId/trustStatus. Treats the member as legacy => full
+        // reveal, so existing behaviour is preserved.
+        public GroupMemberInfo(String userId, String name, String avatarUrl,
+                               Boolean isOnline, String role, LocalDateTime joinedAt) {
+            this(userId, name, avatarUrl, isOnline, role, joinedAt, null, null);
+        }
+    }
 
     public record LastMessageInfo(
             String id,

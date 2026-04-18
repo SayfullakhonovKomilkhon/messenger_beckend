@@ -29,19 +29,22 @@ public class GroupService {
     private final UserRepository userRepository;
     private final NotificationService notificationService;
     private final GroupSenderKeyService groupSenderKeyService;
+    private final ParticipantProfileResolver profileResolver;
 
     public GroupService(ConversationRepository conversationRepository,
                         ParticipantRepository participantRepository,
                         MessageRepository messageRepository,
                         UserRepository userRepository,
                         NotificationService notificationService,
-                        GroupSenderKeyService groupSenderKeyService) {
+                        GroupSenderKeyService groupSenderKeyService,
+                        ParticipantProfileResolver profileResolver) {
         this.conversationRepository = conversationRepository;
         this.participantRepository = participantRepository;
         this.messageRepository = messageRepository;
         this.userRepository = userRepository;
         this.notificationService = notificationService;
         this.groupSenderKeyService = groupSenderKeyService;
+        this.profileResolver = profileResolver;
     }
 
     @Transactional
@@ -63,6 +66,9 @@ public class GroupService {
         ownerCp.setUser(creator);
         ownerCp.setRole(GroupRole.OWNER);
         ownerCp.setStatus("ACTIVE");
+        // The group creator is implicitly opted-in — they built the group,
+        // so hiding their name/avatar makes no sense.
+        ownerCp.setTrustStatus("TRUSTED");
         participantRepository.save(ownerCp);
 
         if (request.memberIds() != null) {
@@ -78,6 +84,9 @@ public class GroupService {
                 memberCp.setUser(member);
                 memberCp.setRole(GroupRole.MEMBER);
                 memberCp.setStatus("ACTIVE");
+                // Added-by-someone-else: hide their identity until they
+                // explicitly reveal themselves in the group.
+                memberCp.setTrustStatus("PENDING");
                 participantRepository.save(memberCp);
                 addedCount++;
 
@@ -157,6 +166,9 @@ public class GroupService {
         cp.setUser(newMember);
         cp.setRole(GroupRole.MEMBER);
         cp.setStatus("ACTIVE");
+        // Added-by-someone-else: hide their identity until they explicitly
+        // press "Reveal me" in the group.
+        cp.setTrustStatus("PENDING");
         participantRepository.save(cp);
 
         notificationService.sendToUser(newMemberId, "/queue/messages", Map.of(
@@ -320,6 +332,10 @@ public class GroupService {
         cp.setUser(user);
         cp.setRole(GroupRole.MEMBER);
         cp.setStatus("ACTIVE");
+        // Join-by-link is a self-initiated action, but we still start
+        // hidden so the user sees the "Reveal me" banner and makes an
+        // explicit choice — let them opt in deliberately.
+        cp.setTrustStatus("PENDING");
         participantRepository.save(cp);
 
         log.info("User {} joined group {} via invite link", userId, conversation.getId());
@@ -396,19 +412,38 @@ public class GroupService {
                 myCp != null && myCp.getUnreadCount() != null ? myCp.getUnreadCount() : 0,
                 myCp != null && Boolean.TRUE.equals(myCp.getIsPinned()),
                 myCp != null && Boolean.TRUE.equals(myCp.getIsMuted()),
-                null, null, null
+                myCp != null ? myCp.getTrustStatus() : null, null, null
         );
     }
 
+    /**
+     * Mirrors {@link ChatService#resolveDisplay} self-reveal logic: a member's
+     * real name/avatar/online status is only exposed when their own
+     * {@code trust_status} is TRUSTED (or legacy null, or they're a bot).
+     * Otherwise we return {@code publicId} as a stable fallback label.
+     */
     private ConversationResponse.GroupMemberInfo toMemberInfo(ConversationParticipant cp) {
         User user = cp.getUser();
+        ParticipantProfileResolver.Profile profile = profileResolver.resolve(user);
+        boolean isBot = profile.isBot();
+        String trustStatus = cp.getTrustStatus();
+        boolean revealed = isBot
+                || trustStatus == null
+                || "TRUSTED".equals(trustStatus);
+
+        String name = revealed ? profile.displayName() : null;
+        String avatar = revealed ? profile.avatarUrl() : null;
+        Boolean online = revealed ? user.getIsOnline() : null;
+
         return new ConversationResponse.GroupMemberInfo(
                 user.getId().toString(),
-                user.getName(),
-                user.getAvatarUrl(),
-                user.getIsOnline(),
+                name,
+                avatar,
+                online,
                 cp.getRole() != null ? cp.getRole().name() : GroupRole.MEMBER.name(),
-                cp.getJoinedAt()
+                cp.getJoinedAt(),
+                user.getPublicId(),
+                trustStatus
         );
     }
 }
