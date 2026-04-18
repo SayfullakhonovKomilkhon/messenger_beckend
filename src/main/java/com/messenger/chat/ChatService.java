@@ -159,22 +159,35 @@ public class ChatService {
         conversation.setType(ConversationType.DIRECT);
         conversation = conversationRepository.save(conversation);
 
+        // Trust flow is meaningless when one side is a bot: bots are public
+        // automated accounts with no client UI to press "accept", so without
+        // this shortcut the human would see a "confirm trust" banner that
+        // can never be reciprocated and the bot's display name/avatar would
+        // stay hidden behind the mutualTrust check. Skip the handshake
+        // entirely for bot conversations.
+        boolean isBotChat = Boolean.TRUE.equals(currentUser.getIsBot())
+                || Boolean.TRUE.equals(participant.getIsBot());
+        String initialTrust = isBotChat ? "TRUSTED" : "PENDING";
+
         ConversationParticipant cp1 = new ConversationParticipant();
         cp1.setConversation(conversation);
         cp1.setUser(currentUser);
         cp1.setStatus("ACTIVE");
-        cp1.setTrustStatus("PENDING");
+        cp1.setTrustStatus(initialTrust);
         cp1.setSearchMethod(searchMethod);
         participantRepository.save(cp1);
 
         ConversationParticipant cp2 = new ConversationParticipant();
         cp2.setConversation(conversation);
         cp2.setUser(participant);
-        cp2.setStatus("PENDING");
-        cp2.setTrustStatus("PENDING");
+        // Bots auto-accept the chat; humans still need to ACK by opening it.
+        cp2.setStatus(isBotChat ? "ACTIVE" : "PENDING");
+        cp2.setTrustStatus(initialTrust);
         participantRepository.save(cp2);
 
-        log.info("Conversation created between {} and {} (recipient PENDING)", userId, participantId);
+        log.info("Conversation created between {} and {} (recipient {}, trust={})",
+                userId, participantId,
+                isBotChat ? "ACTIVE (bot)" : "PENDING", initialTrust);
 
         return buildDirectConversationResponse(conversation.getId(), conversation, cp1, cp2, null);
     }
@@ -721,16 +734,25 @@ public class ChatService {
             UUID convId, Conversation conv, ConversationParticipant myCp,
             ConversationParticipant otherCp, ConversationResponse.LastMessageInfo lastMsg) {
         User other = otherCp.getUser();
-        boolean mutualTrust = "TRUSTED".equals(myCp.getTrustStatus())
-                && "TRUSTED".equals(otherCp.getTrustStatus());
+        ParticipantProfileResolver.Profile otherProfile = profileResolver.resolve(other);
+        boolean isBot = otherProfile.isBot();
+        // Bot chats bypass the trust handshake (bots can't press "accept"),
+        // so treat them as implicitly mutually trusted for response shaping.
+        boolean mutualTrust = isBot
+                || ("TRUSTED".equals(myCp.getTrustStatus())
+                        && "TRUSTED".equals(otherCp.getTrustStatus()));
 
         String sm = myCp.getSearchMethod();
         if (sm == null) sm = otherCp.getSearchMethod();
 
-        ParticipantProfileResolver.Profile otherProfile = profileResolver.resolve(other);
-        boolean isBot = otherProfile.isBot();
         String displayName = otherProfile.displayName();
         String displayAvatar = otherProfile.avatarUrl();
+
+        // For legacy bot conversations created before this fix the DB might
+        // still have PENDING on either side — normalise what we return to the
+        // client so the trust banner no longer shows up.
+        String myTrust = isBot ? "TRUSTED" : myCp.getTrustStatus();
+        String otherTrust = isBot ? "TRUSTED" : otherCp.getTrustStatus();
 
         ConversationResponse.ParticipantInfo pInfo;
         if (mutualTrust) {
@@ -770,8 +792,8 @@ public class ChatService {
                 myCp.getUnreadCount() != null ? myCp.getUnreadCount() : 0,
                 Boolean.TRUE.equals(myCp.getIsPinned()),
                 Boolean.TRUE.equals(myCp.getIsMuted()),
-                myCp.getTrustStatus(),
-                otherCp.getTrustStatus(),
+                myTrust,
+                otherTrust,
                 effectiveSm
         );
     }
