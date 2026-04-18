@@ -50,10 +50,20 @@ public class ProfileService {
             return userMapper.toProfileResponse(user);
         }
 
+        // Bots have no "reveal me" UI — their identity is public by design.
+        // Always return their full profile regardless of trust state.
+        if (Boolean.TRUE.equals(user.getIsBot())) {
+            return userMapper.toProfileResponse(user);
+        }
+
         List<ConversationParticipant> participants =
                 participantRepository.findDirectConversationParticipants(viewerId, targetId);
 
-        boolean mutualTrust = false;
+        // Self-reveal: the target's profile is visible to the viewer when the
+        // *target* themselves have set trust_status=TRUSTED in the shared
+        // conversation. Legacy rows (trust_status == null) are treated as
+        // TRUSTED so pre-feature chats aren't retroactively hidden.
+        boolean targetRevealed = false;
         String searchMethod = null;
 
         if (participants.size() >= 2) {
@@ -63,14 +73,16 @@ public class ProfileService {
                 if (p.getUser().getId().equals(viewerId)) viewerPart = p;
                 else if (p.getUser().getId().equals(targetId)) targetPart = p;
             }
-            if (viewerPart != null && targetPart != null) {
-                mutualTrust = "TRUSTED".equals(viewerPart.getTrustStatus())
-                        && "TRUSTED".equals(targetPart.getTrustStatus());
+            if (targetPart != null) {
+                String ts = targetPart.getTrustStatus();
+                targetRevealed = ts == null || "TRUSTED".equals(ts);
+            }
+            if (viewerPart != null) {
                 searchMethod = viewerPart.getSearchMethod();
             }
         }
 
-        if (mutualTrust) {
+        if (targetRevealed) {
             return userMapper.toProfileResponse(user);
         }
 
