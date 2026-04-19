@@ -218,6 +218,9 @@ public class ChatService {
         if (request.replyToId() != null) {
             message.setReplyToId(request.replyToId());
         }
+        if (request.forwardedFromId() != null) {
+            message.setForwardedFromId(request.forwardedFromId());
+        }
         if (Boolean.TRUE.equals(request.encrypted())) {
             message.setEncrypted(true);
             message.setEncryptedFileKey(request.encryptedFileKey());

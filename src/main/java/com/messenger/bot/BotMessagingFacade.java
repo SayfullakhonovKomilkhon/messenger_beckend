@@ -44,7 +44,7 @@ public class BotMessagingFacade {
                 request.mimeType(),
                 clientMessageId,
                 null, null, null, null,
-                false, null, null, null
+                false, null, null, null, null
         );
 
         MessageResponse response = chatService.sendAndNotify(botUserId, chatRequest);
